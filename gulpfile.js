@@ -14,13 +14,14 @@ var browserSync = require('browser-sync');
 var changed = require('gulp-changed');
 var plumber = require('gulp-plumber');
 var tools = require('aurelia-tools');
+var exec = require('child_process').exec;
 
 var path = {
-  source:'src/**/*.js',
-  html:'src/**/*.html',
-  style:'styles/**/*.css',
-  output:'dist/',
-  doc:'./doc'
+  source: 'src/**/*.js',
+  html: 'src/**/*.html',
+  style: 'styles/**/*.css',
+  output: 'dist/',
+  doc: './doc'
 };
 
 var compilerOptions = {
@@ -49,27 +50,39 @@ var compilerOptions = {
   }
 };
 
-var jshintConfig = {esnext:true};
+var jshintConfig = {
+  esnext: true
+};
 
 gulp.task('clean', function() {
- return gulp.src([path.output])
+  return gulp.src([path.output])
     .pipe(vinylPaths(del));
 });
 
-gulp.task('build-system', function () {
+gulp.task('build-system', function() {
   return gulp.src(path.source)
     .pipe(plumber())
-    .pipe(changed(path.output, {extension: '.js'}))
-    .pipe(to5(assign({}, compilerOptions, {modules:'system'})))
+    .pipe(changed(path.output, {
+      extension: '.js'
+    }))
+    .pipe(to5(assign({}, compilerOptions, {
+      modules: 'system'
+    })))
     .pipe(gulp.dest(path.output))
-    .pipe(browserSync.reload({ stream: true }));
+    .pipe(browserSync.reload({
+      stream: true
+    }));
 });
 
-gulp.task('build-html', function () {
+gulp.task('build-html', function() {
   return gulp.src(path.html)
-    .pipe(changed(path.output, {extension: '.html'}))
+    .pipe(changed(path.output, {
+      extension: '.html'
+    }))
     .pipe(gulp.dest(path.output))
-    .pipe(browserSync.reload({ stream: true }));
+    .pipe(browserSync.reload({
+      stream: true
+    }));
 });
 
 gulp.task('lint', function() {
@@ -78,19 +91,21 @@ gulp.task('lint', function() {
     .pipe(jshint.reporter(stylish));
 });
 
-gulp.task('doc-generate', function(){
+gulp.task('doc-generate', function() {
   return gulp.src(path.source)
     .pipe(yuidoc.parser(null, 'api.json'))
     .pipe(gulp.dest(path.doc));
 });
 
-gulp.task('doc', ['doc-generate'], function(){
+gulp.task('doc', ['doc-generate'], function() {
   tools.transformAPIModel(path.doc);
 });
 
-gulp.task('bump-version', function(){
+gulp.task('bump-version', function() {
   return gulp.src(['./package.json'])
-    .pipe(bump({type:'patch'})) //major|minor|patch|prerelease
+    .pipe(bump({
+      type: 'patch'
+    })) //major|minor|patch|prerelease
     .pipe(gulp.dest('./'));
 });
 
@@ -108,13 +123,12 @@ gulp.task('changelog', function(callback) {
 
 gulp.task('build', function(callback) {
   return runSequence(
-    'clean',
-    ['build-system', 'build-html'],
+    'clean', ['build-system', 'build-html'],
     callback
   );
 });
 
-gulp.task('update-own-deps', function(){
+gulp.task('update-own-deps', function() {
   tools.updateOwnDependenciesFromLocalRepositories();
 });
 
@@ -124,12 +138,43 @@ gulp.task('serve', ['build'], function(done) {
     port: 9000,
     server: {
       baseDir: ['.'],
-      middleware: function (req, res, next) {
+      middleware: function(req, res, next) {
         res.setHeader('Access-Control-Allow-Origin', '*');
         next();
       }
     }
   }, done);
+});
+
+gulp.task('build-src-index', function() {
+  var fs = require('fs');
+  var glob = require('glob');
+  var path = require('path');
+  var opt = {};
+
+  glob('dist/*.js', opt, function(er, files) {
+
+    var imports = files.map(function(f) {
+      var fileName = path.basename(f);
+      var ext = new RegExp(path.extname(fileName), 'g');
+      var moduleName = fileName.replace(ext, '');
+      return "import './" + moduleName + "';";
+    });
+
+    fs.writeFileSync(
+      './dist/build-index.js',
+      imports.join('\n')
+    );
+  });
+
+});
+
+gulp.task('bundle', ['build-src-index'], function(cb) {
+  exec('jspm bundle dist/build-index + aurelia-bootstrapper build.js --inject', function(err, stdout, stderr) {
+    console.log(stdout);
+    console.log(stderr);
+    cb(err);
+  });
 });
 
 gulp.task('watch', ['serve'], function() {
@@ -139,7 +184,7 @@ gulp.task('watch', ['serve'], function() {
   });
 });
 
-gulp.task('prepare-release', function(callback){
+gulp.task('prepare-release', function(callback) {
   return runSequence(
     'build',
     'lint',
